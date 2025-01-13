@@ -40,7 +40,16 @@ if uploaded_file:
     try:
         # Open the image
         image = Image.open(uploaded_file)
-        st.image(image, caption="Uploaded Image", use_container_width=True)
+
+        # Check Streamlit version for compatibility
+        import streamlit as stlib
+        version = stlib.__version__
+        major, minor, patch = map(int, version.split('.'))
+
+        if major > 1 or (major == 1 and minor >= 10):  # Adjust version as per the Streamlit version you use
+            st.image(image, caption="Uploaded Image", use_container_width=True)
+        else:
+            st.image(image, caption="Uploaded Image")  # Fallback for older versions without 'use_container_width'
 
         # Extract image dimensions
         pixel_width, pixel_height = image.size
