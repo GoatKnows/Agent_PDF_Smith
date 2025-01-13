@@ -40,7 +40,7 @@ if uploaded_file:
     try:
         # Open the image
         image = Image.open(uploaded_file)
-        st.image(image, caption="Uploaded Image", use_container_width=True)
+        st.image(image, caption="Uploaded Image")  # Removed use_container_width
 
         # Extract image dimensions
         pixel_width, pixel_height = image.size
