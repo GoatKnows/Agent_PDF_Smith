@@ -1,0 +1,2 @@
+streamlit==1.24.1  # Ensure compatibility with your app's features
+pillow==10.0.0     # For image handling
