@@ -39,12 +39,14 @@ def convert_rgb_to_cmyk(image):
     if image.mode != "RGB":
         image = image.convert("RGB")
 
-    base_path = "/Users/ryangoutier/Library/Mobile Documents/com~apple~CloudDocs/Desktop/Agents/ShocAgent/Adobe ICC Profiles (end-user)"
-    srgb_profile_path = os.path.join(base_path, "RGB", "AdobeRGB1998.icc")
-    cmyk_profile_path = os.path.join(base_path, "CMYK", "USWebCoatedSWOP.icc")
+    base_path = os.path.join(os.path.dirname(__file__), "icc_profiles")
+    srgb_profile_path = os.path.join(base_path, "AdobeRGB1998.icc")
+    cmyk_profile_path = os.path.join(base_path, "USWebCoatedSWOP.icc")
 
-    if not os.path.exists(srgb_profile_path) or not os.path.exists(cmyk_profile_path):
-        raise FileNotFoundError("ICC profiles not found at specified paths.")
+    if not os.path.exists(srgb_profile_path):
+        st.error(f"sRGB profile not found at: {srgb_profile_path}")
+    if not os.path.exists(cmyk_profile_path):
+        st.error(f"CMYK profile not found at: {cmyk_profile_path}")
 
     srgb_profile = ImageCms.ImageCmsProfile(srgb_profile_path)
     cmyk_profile = ImageCms.ImageCmsProfile(cmyk_profile_path)
@@ -148,8 +150,9 @@ if uploaded_file:
                 # Save as a CMYK 300 DPI PDF
                 pdf_path = "upscaled_image.pdf"
                 cmyk_profile_path = os.path.join(
-                    "/Users/ryangoutier/Library/Mobile Documents/com~apple~CloudDocs/Desktop/Agents/ShocAgent/Adobe ICC Profiles (end-user)",
-                    "CMYK", "USWebCoatedSWOP.icc"
+                    os.path.dirname(__file__),
+                    "icc_profiles",
+                    "USWebCoatedSWOP.icc"
                 )
                 save_cmyk_pdf(upscaled_image_cmyk, pdf_path, cmyk_profile_path)
 
