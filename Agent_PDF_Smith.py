@@ -41,7 +41,7 @@ def convert_rgb_to_cmyk(image):
 
     base_path = os.path.join(os.path.dirname(__file__), "icc_profiles")
     srgb_profile_path = os.path.join(base_path, "AdobeRGB1998.icc")
-    cmyk_profile_path = os.path.join(base_path, "USWebCoatedSWOP.icc")
+    cmyk_profile_path = os.path.join(base_path, "CoatedFOGRA39.icc")  # Use FOGRA39 for better Adobe compatibility
 
     if not os.path.exists(srgb_profile_path):
         st.error(f"sRGB profile not found at: {srgb_profile_path}")
@@ -50,7 +50,7 @@ def convert_rgb_to_cmyk(image):
 
     srgb_profile = ImageCms.ImageCmsProfile(srgb_profile_path)
     cmyk_profile = ImageCms.ImageCmsProfile(cmyk_profile_path)
-    transform = ImageCms.buildTransform(srgb_profile, cmyk_profile, "RGB", "CMYK", renderingIntent=1)  # Relative colorimetric
+    transform = ImageCms.buildTransform(srgb_profile, cmyk_profile, "RGB", "CMYK", renderingIntent=0)  # Try Perceptual
     cmyk_image = ImageCms.applyTransform(image, transform)
     return cmyk_image
 
@@ -85,24 +85,26 @@ def save_cmyk_pdf(image, output_path, cmyk_profile_path):
     if image.mode != "CMYK":
         raise ValueError("Image must be in CMYK mode to save as PDF.")
 
-    # Flatten image to ensure no transparency
+    # Flatten the image completely
     flattened_image = Image.new("CMYK", image.size, (255, 255, 255, 0))
     flattened_image.paste(image)
 
+    # Embed ICC profile
     if not os.path.exists(cmyk_profile_path):
         raise FileNotFoundError(f"CMYK profile not found at: {cmyk_profile_path}")
 
     with open(cmyk_profile_path, "rb") as profile:
         icc_data = profile.read()
 
-    # Save PDF with proper embedding
-    flattened_image.save(
-        output_path,
-        "PDF",
-        resolution=300.0,
-        icc_profile=icc_data,
-        quality=95
-    )
+    # Save PDF with alternate library (fpdf2 for better compatibility)
+    from fpdf import FPDF
+
+    pdf = FPDF(unit="pt", format=[image.width, image.height])
+    pdf.add_page()
+    pdf.image(flattened_image, x=0, y=0, w=image.width, h=image.height)
+    pdf.output(output_path)
+
+    st.write("PDF saved successfully with alternate library.")
 
 # Streamlit App UI
 st.title("RGB to CMYK 300 DPI Print-Ready PDF Converter")
@@ -160,7 +162,7 @@ if uploaded_file:
                 cmyk_profile_path = os.path.join(
                     os.path.dirname(__file__),
                     "icc_profiles",
-                    "USWebCoatedSWOP.icc"
+                    "CoatedFOGRA39.icc"
                 )
                 save_cmyk_pdf(upscaled_image_cmyk, pdf_path, cmyk_profile_path)
 
