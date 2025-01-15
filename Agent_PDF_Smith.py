@@ -91,20 +91,25 @@ def save_cmyk_pdf(image, output_path, cmyk_profile_path):
     flattened_image = Image.new("CMYK", image.size, (255, 255, 255, 0))
     flattened_image.paste(image)
 
-    # Embed ICC profile
     if not os.path.exists(cmyk_profile_path):
         raise FileNotFoundError(f"CMYK profile not found at: {cmyk_profile_path}")
 
     with open(cmyk_profile_path, "rb") as profile:
         icc_data = profile.read()
 
-    # Save PDF with alternate library (fpdf2 for better compatibility)
-    from fpdf import FPDF
+    # Save flattened_image to a temporary file
+    temp_image_path = "temp_image.jpg"
+    flattened_image.save(temp_image_path, "JPEG", quality=95)
 
+    # Use FPDF to embed the flattened image
+    from fpdf import FPDF
     pdf = FPDF(unit="pt", format=[image.width, image.height])
     pdf.add_page()
-    pdf.image(flattened_image, x=0, y=0, w=image.width, h=image.height)
+    pdf.image(temp_image_path, x=0, y=0, w=image.width, h=image.height)
     pdf.output(output_path)
+
+    # Clean up temporary file
+    os.remove(temp_image_path)
 
     st.write("PDF saved successfully with alternate library.")
 
