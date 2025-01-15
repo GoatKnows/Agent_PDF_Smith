@@ -91,6 +91,9 @@ def save_cmyk_pdf(image, output_path, cmyk_profile_path):
     flattened_image.paste(image, mask=None)
 
     # Embed ICC profile
+    if not os.path.exists(cmyk_profile_path):
+        raise FileNotFoundError(f"CMYK profile not found at: {cmyk_profile_path}")
+
     with open(cmyk_profile_path, "rb") as profile:
         icc_data = profile.read()
 
