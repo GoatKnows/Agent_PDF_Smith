@@ -97,7 +97,8 @@ def save_cmyk_pdf(image, output_path, cmyk_profile_path):
     with open(cmyk_profile_path, "rb") as profile:
         icc_data = profile.read()
 
-    flattened_image.save(output_path, "PDF", resolution=300.0, icc_profile=icc_data)
+    # Save PDF with proper CMYK and ICC profile
+    flattened_image.save(output_path, "PDF", resolution=300.0, icc_profile=icc_data, quality=95)
 
 # Streamlit App UI
 st.title("RGB to CMYK 300 DPI Print-Ready PDF Converter")
