@@ -45,8 +45,10 @@ def convert_rgb_to_cmyk(image):
 
     if not os.path.exists(srgb_profile_path):
         st.error(f"sRGB profile not found at: {srgb_profile_path}")
+        raise FileNotFoundError(f"sRGB profile not found at: {srgb_profile_path}")
     if not os.path.exists(cmyk_profile_path):
         st.error(f"CMYK profile not found at: {cmyk_profile_path}")
+        raise FileNotFoundError(f"CMYK profile not found at: {cmyk_profile_path}")
 
     srgb_profile = ImageCms.ImageCmsProfile(srgb_profile_path)
     cmyk_profile = ImageCms.ImageCmsProfile(cmyk_profile_path)
