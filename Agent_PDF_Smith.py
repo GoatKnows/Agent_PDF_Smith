@@ -5,6 +5,8 @@ import torch
 from torchvision.transforms import functional as F
 import time
 import os
+from PyPDF2 import PdfReader
+from pdf2image import convert_from_path
 
 # Disable decompression bomb protection or increase limit
 Image.MAX_IMAGE_PIXELS = None
@@ -41,7 +43,7 @@ def convert_rgb_to_cmyk(image):
 
     base_path = os.path.join(os.path.dirname(__file__), "icc_profiles")
     srgb_profile_path = os.path.join(base_path, "AdobeRGB1998.icc")
-    cmyk_profile_path = os.path.join(base_path, "CoatedFOGRA39.icc")  # Use FOGRA39 for better Adobe compatibility
+    cmyk_profile_path = os.path.join(base_path, "CoatedFOGRA39.icc")
 
     if not os.path.exists(srgb_profile_path):
         st.error(f"sRGB profile not found at: {srgb_profile_path}")
@@ -52,7 +54,7 @@ def convert_rgb_to_cmyk(image):
 
     srgb_profile = ImageCms.ImageCmsProfile(srgb_profile_path)
     cmyk_profile = ImageCms.ImageCmsProfile(cmyk_profile_path)
-    transform = ImageCms.buildTransform(srgb_profile, cmyk_profile, "RGB", "CMYK", renderingIntent=0)  # Try Perceptual
+    transform = ImageCms.buildTransform(srgb_profile, cmyk_profile, "RGB", "CMYK", renderingIntent=0)
     cmyk_image = ImageCms.applyTransform(image, transform)
     return cmyk_image
 
@@ -114,87 +116,128 @@ def save_cmyk_pdf(image, output_path, cmyk_profile_path):
     st.write("PDF saved successfully with alternate library.")
 
 # Streamlit App UI
-st.title("RGB to CMYK 300 DPI Print-Ready PDF Converter")
-st.write("Upload an image, convert it to a print-ready CMYK 300 DPI PDF, or download in other high-res formats.")
+st.title("PDF/Image to CMYK 300 DPI Print-Ready Converter")
+st.write("Upload a PDF or image, convert it to a print-ready CMYK 300 DPI file.")
 
 # File Upload
-uploaded_file = st.file_uploader("Choose an image file", type=["jpg", "jpeg", "png", "tiff"])
+uploaded_file = st.file_uploader("Choose a file (PDF or image)", type=["jpg", "jpeg", "png", "tiff", "pdf"])
 
 if uploaded_file:
-    try:
-        # Open the image
-        image = Image.open(uploaded_file)
-        st.image(image, caption="Uploaded Image", use_container_width=True)
+    file_extension = os.path.splitext(uploaded_file.name)[1].lower()
 
-        pixel_width, pixel_height = image.size
-        st.write(f"Image Dimensions: {pixel_width} x {pixel_height} pixels")
+    if file_extension == ".pdf":
+        try:
+            # Convert PDF to images
+            st.info("Converting PDF to images...")
+            with st.spinner("Processing PDF..."):
+                pdf_images = convert_from_path(uploaded_file)
+            st.success(f"Extracted {len(pdf_images)} pages from the PDF.")
 
-        metadata_dpi = extract_dpi(image)
-        if metadata_dpi:
-            dpi_x, dpi_y = metadata_dpi
-            st.success(f"DPI from Metadata: {dpi_x} x {dpi_y}")
-        else:
-            dpi_x, dpi_y = 72, 72
-            st.warning("No DPI metadata found. Assuming default 72 DPI.")
+            processed_pages = []
 
-        st.info("Set print size in mm to calculate DPI")
-        selected_width_mm = st.number_input("Enter width in mm:", min_value=1, step=1)
-        selected_height_mm = st.number_input("Enter height in mm:", min_value=1, step=1)
+            for i, page_image in enumerate(pdf_images):
+                st.image(page_image, caption=f"Page {i + 1}", use_container_width=True)
 
-        if selected_width_mm and selected_height_mm:
-            dpi_x_manual, dpi_y_manual = calculate_dpi(pixel_width, pixel_height, selected_width_mm, selected_height_mm)
-            lowest_dpi = min(dpi_x_manual, dpi_y_manual)
+                # Convert each page to CMYK
+                cmyk_page = convert_rgb_to_cmyk(page_image)
+                processed_pages.append(cmyk_page)
 
-            st.write(f"Calculated DPI based on input dimensions: {dpi_x_manual:.2f} x {dpi_y_manual:.2f}")
-
-            if is_print_ready(dpi_x_manual, dpi_y_manual):
-                st.success("The image is print-ready for the specified dimensions!")
-            else:
-                st.warning("The image is not print-ready for the specified dimensions. Upscaling is recommended.")
-
-        if is_print_ready(dpi_x, dpi_y):
-            st.success("Image is print-ready!")
-        else:
-            st.warning("Image is not print-ready. Upscaling is recommended.")
-            if st.button("Upscale to 300 DPI"):
-                with st.spinner("Upscaling image..."):
-                    upscaled_image = upscale_image_to_dpi(image, target_dpi=300, original_dpi=dpi_x)
-                st.image(upscaled_image, caption="Upscaled Image", use_container_width=True)
-
-                # Convert to CMYK
-                upscaled_image_cmyk = convert_rgb_to_cmyk(upscaled_image)
-
-                # Save as a CMYK 300 DPI PDF
-                pdf_path = "upscaled_image.pdf"
-                cmyk_profile_path = os.path.join(
-                    os.path.dirname(__file__),
-                    "icc_profiles",
-                    "CoatedFOGRA39.icc"
+            # Save the processed pages back as a CMYK PDF
+            output_pdf_path = "processed_output.pdf"
+            cmyk_profile_path = os.path.join(
+                os.path.dirname(__file__), "icc_profiles", "CoatedFOGRA39.icc"
+            )
+            with open(output_pdf_path, "wb") as pdf_file:
+                processed_pages[0].save(
+                    pdf_file,
+                    save_all=True,
+                    append_images=processed_pages[1:],
+                    dpi=(300, 300),
+                    icc_profile=open(cmyk_profile_path, "rb").read(),
                 )
-                save_cmyk_pdf(upscaled_image_cmyk, pdf_path, cmyk_profile_path)
 
-                with open(pdf_path, "rb") as file:
-                    st.download_button("Download Print-Ready CMYK PDF", file, file_name="print_ready.pdf", mime="application/pdf")
+            with open(output_pdf_path, "rb") as file:
+                st.download_button(
+                    "Download Print-Ready CMYK PDF", file, file_name="print_ready.pdf", mime="application/pdf"
+                )
+        except Exception as e:
+            st.error(f"Error processing PDF: {e}")
 
-                # Save in other formats
-                formats = {
-                    "TIFF (CMYK)": "upscaled_image_cmyk.tiff",
-                    "JPEG (High Quality)": "upscaled_image_high_quality.jpg",
-                }
+    else:
+        try:
+            # Process image files (existing functionality)
+            image = Image.open(uploaded_file)
+            st.image(image, caption="Uploaded Image", use_container_width=True)
 
-                for label, filename in formats.items():
-                    if label == "TIFF (CMYK)":
-                        upscaled_image_cmyk.save(filename, dpi=(300, 300))
-                    else:
-                        upscaled_image_cmyk.save(filename, format=label.split(' ')[0].upper(), dpi=(300, 300))
+            pixel_width, pixel_height = image.size
+            st.write(f"Image Dimensions: {pixel_width} x {pixel_height} pixels")
 
-                    with open(filename, "rb") as file:
-                        st.download_button(
-                            f"Download {label}",
-                            data=file,
-                            file_name=filename,
-                            mime=f"image/{label.split(' ')[0].lower()}"
-                        )
+            metadata_dpi = extract_dpi(image)
+            if metadata_dpi:
+                dpi_x, dpi_y = metadata_dpi
+                st.success(f"DPI from Metadata: {dpi_x} x {dpi_y}")
+            else:
+                dpi_x, dpi_y = 72, 72
+                st.warning("No DPI metadata found. Assuming default 72 DPI.")
 
-    except Exception as e:
-        st.error(f"An error occurred: {e}")
+            st.info("Set print size in mm to calculate DPI")
+            selected_width_mm = st.number_input("Enter width in mm:", min_value=1, step=1)
+            selected_height_mm = st.number_input("Enter height in mm:", min_value=1, step=1)
+
+            if selected_width_mm and selected_height_mm:
+                dpi_x_manual, dpi_y_manual = calculate_dpi(pixel_width, pixel_height, selected_width_mm, selected_height_mm)
+                lowest_dpi = min(dpi_x_manual, dpi_y_manual)
+
+                st.write(f"Calculated DPI based on input dimensions: {dpi_x_manual:.2f} x {dpi_y_manual:.2f}")
+
+                if is_print_ready(dpi_x_manual, dpi_y_manual):
+                    st.success("The image is print-ready for the specified dimensions!")
+                else:
+                    st.warning("The image is not print-ready for the specified dimensions. Upscaling is recommended.")
+
+            if is_print_ready(dpi_x, dpi_y):
+                st.success("Image is print-ready!")
+            else:
+                st.warning("Image is not print-ready. Upscaling is recommended.")
+                if st.button("Upscale to 300 DPI"):
+                    with st.spinner("Upscaling image..."):
+                        upscaled_image = upscale_image_to_dpi(image, target_dpi=300, original_dpi=dpi_x)
+                    st.image(upscaled_image, caption="Upscaled Image", use_container_width=True)
+
+                    # Convert to CMYK
+                    upscaled_image_cmyk = convert_rgb_to_cmyk(upscaled_image)
+
+                    # Save as a CMYK 300 DPI PDF
+                    pdf_path = "upscaled_image.pdf"
+                    cmyk_profile_path = os.path.join(
+                        os.path.dirname(__file__),
+                        "icc_profiles",
+                        "CoatedFOGRA39.icc"
+                    )
+                    save_cmyk_pdf(upscaled_image_cmyk, pdf_path, cmyk_profile_path)
+
+                    with open(pdf_path, "rb") as file:
+                        st.download_button("Download Print-Ready CMYK PDF", file, file_name="print_ready.pdf", mime="application/pdf")
+
+                    # Save in other formats
+                    formats = {
+                        "TIFF (CMYK)": "upscaled_image_cmyk.tiff",
+                        "JPEG (High Quality)": "upscaled_image_high_quality.jpg",
+                    }
+
+                    for label, filename in formats.items():
+                        if label == "TIFF (CMYK)":
+                            upscaled_image_cmyk.save(filename, dpi=(300, 300))
+                        else:
+                            upscaled_image_cmyk.save(filename, format=label.split(' ')[0].upper(), dpi=(300, 300))
+
+                        with open(filename, "rb") as file:
+                            st.download_button(
+                                f"Download {label}",
+                                data=file,
+                                file_name=filename,
+                                mime=f"image/{label.split(' ')[0].lower()}"
+                            )
+
+        except Exception as e:
+            st.error(f"An error occurred: {e}")
