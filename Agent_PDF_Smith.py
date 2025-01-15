@@ -50,7 +50,7 @@ def convert_rgb_to_cmyk(image):
 
     srgb_profile = ImageCms.ImageCmsProfile(srgb_profile_path)
     cmyk_profile = ImageCms.ImageCmsProfile(cmyk_profile_path)
-    transform = ImageCms.buildTransform(srgb_profile, cmyk_profile, "RGB", "CMYK", renderingIntent=0)  # 0: Perceptual rendering intent
+    transform = ImageCms.buildTransform(srgb_profile, cmyk_profile, "RGB", "CMYK", renderingIntent=1)  # Relative colorimetric
     cmyk_image = ImageCms.applyTransform(image, transform)
     return cmyk_image
 
@@ -82,23 +82,27 @@ def upscale_image_to_dpi(image, target_dpi, original_dpi):
 
 def save_cmyk_pdf(image, output_path, cmyk_profile_path):
     """Save CMYK image as a PDF with embedded ICC profile."""
-    # Ensure the image is in CMYK mode
     if image.mode != "CMYK":
         raise ValueError("Image must be in CMYK mode to save as PDF.")
 
-    # Flatten image to remove transparency layers
+    # Flatten image to ensure no transparency
     flattened_image = Image.new("CMYK", image.size, (255, 255, 255, 0))
-    flattened_image.paste(image, mask=None)
+    flattened_image.paste(image)
 
-    # Embed ICC profile
     if not os.path.exists(cmyk_profile_path):
         raise FileNotFoundError(f"CMYK profile not found at: {cmyk_profile_path}")
 
     with open(cmyk_profile_path, "rb") as profile:
         icc_data = profile.read()
 
-    # Save PDF with proper CMYK and ICC profile
-    flattened_image.save(output_path, "PDF", resolution=300.0, icc_profile=icc_data, quality=95)
+    # Save PDF with proper embedding
+    flattened_image.save(
+        output_path,
+        "PDF",
+        resolution=300.0,
+        icc_profile=icc_data,
+        quality=95
+    )
 
 # Streamlit App UI
 st.title("RGB to CMYK 300 DPI Print-Ready PDF Converter")
