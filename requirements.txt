@@ -5,3 +5,4 @@ streamlit
 numpy
 fpdf
 PyPDF2
+pdf2image
